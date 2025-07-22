@@ -25,10 +25,12 @@
         }
     </style>
 </head>
-<body class="bg-gray-900 text-white flex h-screen">
+<body class="bg-gray-900 text-white flex h-screen relative">
+    <img src="hi.gif" alt="Hi Animation" class="absolute top-0 left-0 w-24 h-24">
     <div class="flex w-full">
         <!-- Main Scoring Area -->
         <div class="flex-1 p-6 flex flex-col items-center justify-center">
+            <img src="logo.png" alt="Logo" class="mx-auto mb-6 w-48 h-auto">
             <div id="playerScoringHeader" class="text-2xl font-bold mb-4">Current Player Name's Scoring</div>
             <div id="scoreBoxes" class="flex gap-4 mb-4"></div>
             <div id="totalScore" class="text-xl mb-4">Total Marks: 0</div>
@@ -71,6 +73,7 @@
         let isCelebrating = false;
         let nextPlayerRequested = false;
         let leaderboard = [];
+        let celebratedTotals = {}; // Track celebrated totals per player
 
         // Show modal on first visit
         document.addEventListener('DOMContentLoaded', () => {
@@ -85,6 +88,7 @@
                 socket.emit('register_player', name);
                 document.getElementById('nameModal').classList.add('hidden');
                 document.getElementById('modalPlayerName').value = '';
+                celebratedTotals[name] = {}; // Initialize celebrated totals for new player
             }
         });
 
@@ -98,6 +102,7 @@
                 document.getElementById('resetButton').classList.add('hidden');
                 document.getElementById('addNextButton').classList.add('hidden');
                 document.getElementById('playerScoringHeader').textContent = "Current Player Name's Scoring";
+                celebratedTotals[currentPlayer.name] = {}; // Reset celebrated totals for this player
             }
         });
 
@@ -187,40 +192,44 @@
         }
 
         function updateLeaderboard(players) {
-            const leaderboard = document.getElementById('leaderboard');
-            leaderboard.innerHTML = '';
+            const leaderboardDiv = document.getElementById('leaderboard');
+            leaderboardDiv.innerHTML = '';
             players.forEach((p, index) => {
                 const div = document.createElement('div');
                 div.className = 'flex justify-between';
                 div.innerHTML = `<span>${p.rank}. ${p.name}</span><span>${p.total}</span>`;
-                leaderboard.appendChild(div);
+                leaderboardDiv.appendChild(div);
             });
         }
 
         function showCelebration(name, score) {
-            isCelebrating = true;
-            const modal = document.getElementById('celebrateModal');
-            const message = document.getElementById('celebrateMessage');
-            message.textContent = `${name}, you set a new high score of ${score}!`;
-            modal.classList.remove('hidden');
-            if (typeof confetti !== 'undefined') {
-                confetti({
-                    particleCount: 100,
-                    spread: 70,
-                    origin: { y: 0.6 }
-                });
-            } else {
-                console.log('Confetti not loaded');
-            }
-            setTimeout(() => {
-                modal.classList.add('hidden');
-                isCelebrating = false;
-                if (nextPlayerRequested) {
-                    nextPlayerRequested = false;
-                    document.getElementById('nameModal').classList.remove('hidden');
-                    document.getElementById('modalPlayerName').focus();
+            if (currentPlayer && currentPlayer.name && !celebratedTotals[currentPlayer.name][score]) {
+                isCelebrating = true;
+                const modal = document.getElementById('celebrateModal');
+                const message = document.getElementById('celebrateMessage');
+                message.textContent = `${name}, you set a new high score of ${score}!`;
+                modal.classList.remove('hidden');
+                if (typeof confetti !== 'undefined') {
+                    confetti({
+                        particleCount: 100,
+                        spread: 70,
+                        origin: { y: 0.6 }
+                    });
+                } else {
+                    console.log('Confetti not loaded');
                 }
-            }, 3000);
+                setTimeout(() => {
+                    modal.classList.add('hidden');
+                    isCelebrating = false;
+                    if (nextPlayerRequested) {
+                        nextPlayerRequested = false;
+                        document.getElementById('nameModal').classList.remove('hidden');
+                        document.getElementById('modalPlayerName').focus();
+                    }
+                    // Mark this score as celebrated for the player
+                    celebratedTotals[currentPlayer.name][score] = true;
+                }, 3000);
+            }
         }
 
         function checkForCelebration() {
@@ -228,7 +237,7 @@
             if (leaderboard.length > 0) {
                 maxScore = Math.max(...leaderboard.map(p => p.total));
             }
-            if (currentPlayer && currentPlayer.total > maxScore) {
+            if (currentPlayer && currentPlayer.total >= maxScore && !celebratedTotals[currentPlayer.name]?.[currentPlayer.total]) {
                 showCelebration(currentPlayer.name, currentPlayer.total);
             } else if (nextPlayerRequested && !isCelebrating) {
                 nextPlayerRequested = false;

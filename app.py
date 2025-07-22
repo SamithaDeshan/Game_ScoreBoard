@@ -29,8 +29,8 @@ def save_to_csv(player):
     with open('scores.csv', 'a', newline='') as file:
         writer = csv.writer(file)
         if not file_exists:
-            writer.writerow(['Name', 'Scores', 'Total'])
-        writer.writerow([player['name'], ','.join(map(str, player['scores'])), player['total']])
+            writer.writerow(['Name', 'Scores', 'Total', 'Completed'])
+        writer.writerow([player['name'], ','.join(map(str, player['scores'])), player['total'], player['completed']])
 
 @socketio.on('register_player')
 def handle_register_player(name):
@@ -38,6 +38,7 @@ def handle_register_player(name):
         return
     player = {'name': name, 'scores': [], 'total': 0, 'completed': False}
     players.append(player)
+    save_to_csv(player)  # Save initial player state
     emit('update_player', player, broadcast=True)
     emit('update_leaderboard', update_leaderboard(), broadcast=True)
 
@@ -48,14 +49,14 @@ def handle_add_score(data):
         if data['score'] in [0, 5, 10]:
             player['scores'].append(data['score'])
             player['total'] += data['score']
+            save_to_csv(player)  # Save after each score addition
             emit('update_player', player, broadcast=True)
             emit('update_leaderboard', update_leaderboard(), broadcast=True)
             if player['total'] > (max(players, key=lambda x: x['total'], default={'total': 0})['total']):
                 emit('new_high_score', {'name': player['name'], 'score': player['total']})
             if len(player['scores']) == 3:
                 player['completed'] = True
-                save_to_csv(player)
-                # Check high score again after completion
+                save_to_csv(player)  # Save completion state
                 if player['total'] > (max(players, key=lambda x: x['total'], default={'total': 0})['total']):
                     emit('new_high_score', {'name': player['name'], 'score': player['total']})
                 emit('player_completed', player, broadcast=True)
@@ -71,6 +72,7 @@ def handle_reset_player(name):
         player['scores'] = []
         player['total'] = 0
         player['completed'] = False
+        save_to_csv(player)  # Save reset state
         emit('update_player', player, broadcast=True)
         emit('update_leaderboard', update_leaderboard(), broadcast=True)
 
@@ -79,6 +81,7 @@ def handle_add_next_player(name):
     if name and not get_player(name):
         player = {'name': name, 'scores': [], 'total': 0, 'completed': False}
         players.append(player)
+        save_to_csv(player)  # Save new player state
         emit('update_player', player, broadcast=True)
         emit('update_leaderboard', update_leaderboard(), broadcast=True)
 
