@@ -1,5 +1,7 @@
 from flask import Flask, render_template
 from flask_socketio import SocketIO, emit
+import csv
+import os
 
 app = Flask(__name__)
 socketio = SocketIO(app, cors_allowed_origins="*")
@@ -20,13 +22,21 @@ def update_leaderboard():
         else:
             sorted_players[i]['rank'] = rank
         rank += 1
-    return sorted_players[:10]  # Limit to top 10
+    return sorted_players[:10]
+
+def save_to_csv(player):
+    file_exists = os.path.isfile('scores.csv')
+    with open('scores.csv', 'a', newline='') as file:
+        writer = csv.writer(file)
+        if not file_exists:
+            writer.writerow(['Name', 'Scores', 'Total'])
+        writer.writerow([player['name'], ','.join(map(str, player['scores'])), player['total']])
 
 @socketio.on('register_player')
 def handle_register_player(name):
     if not name or get_player(name):
         return
-    player = {'name': name, 'scores': [], 'total': 0}
+    player = {'name': name, 'scores': [], 'total': 0, 'completed': False}
     players.append(player)
     emit('update_player', player, broadcast=True)
     emit('update_leaderboard', update_leaderboard(), broadcast=True)
@@ -34,22 +44,24 @@ def handle_register_player(name):
 @socketio.on('add_score')
 def handle_add_score(data):
     player = get_player(data['name'])
-    if player and len(player['scores']) < 5:
-        player['scores'].append(data['score'])
-        player['total'] += data['score']
-        emit('update_player', player, broadcast=True)
-        emit('update_leaderboard', update_leaderboard(), broadcast=True)  # Update leaderboard after each score
-        if player['total'] > (max(players, key=lambda x: x['total'], default={'total': 0})['total']):
-            emit('new_high_score', broadcast=True)
-        if len(player['scores']) == 5:
-            # Reset all players when a player completes 5 rounds
-            for p in players:
-                p['scores'] = []
-                p['total'] = 0
-            players.clear()  # Remove all players
-            emit('reset_all', broadcast=True)
-            emit('update_leaderboard', [], broadcast=True)
-    elif len(player['scores']) >= 5:
+    if player and len(player['scores']) < 3 and not player['completed']:
+        if data['score'] in [0, 5, 10]:
+            player['scores'].append(data['score'])
+            player['total'] += data['score']
+            emit('update_player', player, broadcast=True)
+            emit('update_leaderboard', update_leaderboard(), broadcast=True)
+            if player['total'] > (max(players, key=lambda x: x['total'], default={'total': 0})['total']):
+                emit('new_high_score', {'name': player['name'], 'score': player['total']})
+            if len(player['scores']) == 3:
+                player['completed'] = True
+                save_to_csv(player)
+                # Check high score again after completion
+                if player['total'] > (max(players, key=lambda x: x['total'], default={'total': 0})['total']):
+                    emit('new_high_score', {'name': player['name'], 'score': player['total']})
+                emit('player_completed', player, broadcast=True)
+        else:
+            emit('update_player', player, broadcast=True)
+    elif len(player['scores']) >= 3:
         emit('update_player', player, broadcast=True)
 
 @socketio.on('reset_player')
@@ -58,11 +70,24 @@ def handle_reset_player(name):
     if player:
         player['scores'] = []
         player['total'] = 0
+        player['completed'] = False
+        emit('update_player', player, broadcast=True)
+        emit('update_leaderboard', update_leaderboard(), broadcast=True)
+
+@socketio.on('add_next_player')
+def handle_add_next_player(name):
+    if name and not get_player(name):
+        player = {'name': name, 'scores': [], 'total': 0, 'completed': False}
+        players.append(player)
         emit('update_player', player, broadcast=True)
         emit('update_leaderboard', update_leaderboard(), broadcast=True)
 
 @app.route('/')
-def index():
+def welcome():
+    return render_template('welcome.html')
+
+@app.route('/scoreboard')
+def scoreboard():
     return render_template('index.html')
 
 if __name__ == '__main__':

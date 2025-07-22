@@ -3,190 +3,183 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Scoring App</title>
+    <title>Scoring App - Scoreboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.socket.io/4.5.1/socket.io.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.5.1/dist/confetti.browser.min.js"></script>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            background-color: #1a1a1a;
-            color: #d3d3d3;
-            margin: 0;
-            padding: 0;
-            display: flex;
-            height: 100vh;
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
         }
-        .container {
-            display: flex;
-            width: 100%;
+        .fade-in {
+            animation: fadeIn 0.6s ease-out; /* Slower fade-in */
         }
-        .main {
-            flex: 2;
-            padding: 20px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
+        @keyframes bounceIn {
+            0% { transform: scale(0); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
         }
-        .scores {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 20px;
-        }
-        .score-box {
-            width: 60px;
-            height: 60px;
-            border: 2px solid #d3d3d3;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .total {
-            width: 200px;
-            height: 60px;
-            border: 2px solid #d3d3d3;
-            margin-bottom: 20px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .player-name {
-            width: 200px;
-            padding: 10px;
-            margin-bottom: 10px;
-            background: #333;
-            border: none;
-            color: #d3d3d3;
-        }
-        button {
-            padding: 10px 20px;
-            background: #28a745;
-            border: none;
-            color: white;
-            cursor: pointer;
-        }
-        button:hover {
-            background: #218838;
-        }
-        .sidebar {
-            flex: 1;
-            background: #2c2c2c;
-            padding: 20px;
-            overflow-y: auto;
-        }
-        .leaderboard {
-            margin-top: 10px;
-        }
-        .leaderboard div {
-            display: flex;
-            justify-content: space-between;
-            padding: 5px 0;
-        }
-        @media (max-width: 768px) {
-            .container {
-                flex-direction: column;
-            }
-            .sidebar {
-                order: 2;
-            }
-        }
-        #toast {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            background: #28a745;
-            color: white;
-            padding: 10px;
-            border-radius: 5px;
-            display: none;
+        .bounce-in {
+            animation: bounceIn 0.8s ease-out; /* Slower bounce-in */
         }
     </style>
 </head>
-<body>
-    <div class="container">
-        <div class="main">
-            <div class="scores" id="scoreBoxes"></div>
-            <div class="total" id="totalScore">Total Marks</div>
-            <input type="text" class="player-name" id="playerName" placeholder="Player Name">
-            <button id="startButton">START</button>
-            <button id="resetButton">Reset</button>
-            <div id="toast"></div>
+<body class="bg-gray-900 text-white flex h-screen">
+    <div class="flex w-full">
+        <!-- Main Scoring Area -->
+        <div class="flex-1 p-6 flex flex-col items-center justify-center">
+            <div id="playerScoringHeader" class="text-2xl font-bold mb-4">Current Player Name's Scoring</div>
+            <div id="scoreBoxes" class="flex gap-4 mb-4"></div>
+            <div id="totalScore" class="text-xl mb-4">Total Marks: 0</div>
+            <button id="resetButton" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded mb-2 hidden">Reset</button>
+            <button id="addNextButton" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded hidden">Add Next Player</button>
+            <div id="toast" class="fixed top-4 right-4 bg-green-600 text-white p-2 rounded hidden"></div>
         </div>
-        <div class="sidebar">
-            <h2>TOP 10 PLAYERS</h2>
-            <div class="leaderboard" id="leaderboard"></div>
+
+        <!-- Leaderboard Sidebar -->
+        <div class="w-1/4 bg-gray-800 p-6 overflow-y-auto">
+            <h2 class="text-2xl font-bold mb-4">Top 10 Players</h2>
+            <div id="leaderboard" class="space-y-2"></div>
+        </div>
+
+        <!-- Modal for Player Name -->
+        <div id="nameModal" class="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center hidden">
+            <div class="bg-gray-800 p-6 rounded-lg shadow-lg w-full max-w-md fade-in">
+                <h2 class="text-2xl font-bold mb-4">Enter Player Name</h2>
+                <input id="modalPlayerName" type="text" class="w-full p-2 mb-4 bg-gray-700 border border-gray-600 rounded text-white">
+                <div class="flex justify-center gap-4">
+                    <button id="submitName" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">Submit</button>
+                    <button id="closeModal" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded">Close</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Celebration Popup -->
+        <div id="celebrateModal" class="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center hidden">
+            <div class="bg-green-800 p-6 rounded-lg shadow-lg text-center bounce-in">
+                <h2 class="text-3xl font-bold mb-4 text-yellow-300">Congratulations!</h2>
+                <p id="celebrateMessage" class="text-xl mb-4"></p>
+            </div>
         </div>
     </div>
 
-    <script src="https://cdn.socket.io/4.5.1/socket.io.min.js"></script>
     <script>
         const socket = io.connect('http://localhost:5000');
         let currentPlayer = null;
         let round = 0;
+        let isCelebrating = false;
+        let nextPlayerRequested = false;
+        let leaderboard = [];
 
-        document.getElementById('startButton').addEventListener('click', () => {
-            const name = document.getElementById('playerName').value.trim();
-            if (name && !currentPlayer) {
-                socket.emit('register_player', name);
-                document.getElementById('playerName').value = ''; // Clear input after starting
+        // Show modal on first visit
+        document.addEventListener('DOMContentLoaded', () => {
+            if (!currentPlayer) {
+                document.getElementById('nameModal').classList.remove('hidden');
             }
+        });
+
+        document.getElementById('submitName').addEventListener('click', () => {
+            const name = document.getElementById('modalPlayerName').value.trim();
+            if (name) {
+                socket.emit('register_player', name);
+                document.getElementById('nameModal').classList.add('hidden');
+                document.getElementById('modalPlayerName').value = '';
+            }
+        });
+
+        document.getElementById('closeModal').addEventListener('click', () => {
+            document.getElementById('nameModal').classList.add('hidden');
         });
 
         document.getElementById('resetButton').addEventListener('click', () => {
             if (currentPlayer) {
                 socket.emit('reset_player', currentPlayer.name);
+                document.getElementById('resetButton').classList.add('hidden');
+                document.getElementById('addNextButton').classList.add('hidden');
+                document.getElementById('playerScoringHeader').textContent = "Current Player Name's Scoring";
+            }
+        });
+
+        document.getElementById('addNextButton').addEventListener('click', () => {
+            if (!isCelebrating) {
+                nextPlayerRequested = true;
+                if (round === 3 && !currentPlayer.completed) {
+                    checkForCelebration();
+                } else {
+                    document.getElementById('nameModal').classList.remove('hidden');
+                    document.getElementById('modalPlayerName').focus();
+                }
             }
         });
 
         document.addEventListener('keydown', (e) => {
-            if (currentPlayer && round < 5) {
+            if (currentPlayer && round < 3 && !currentPlayer.completed) {
                 let score = 0;
                 switch (e.key.toUpperCase()) {
                     case 'A': score = 0; break;
-                    case 'B': score = 10; break;
-                    case 'C': score = 20; break;
-                    case 'D': score = 30; break;
+                    case 'B': score = 5; break;
+                    case 'C': score = 10; break;
+                    case 'D': return;
                     default: return;
                 }
                 socket.emit('add_score', { name: currentPlayer.name, score });
                 showToast(`Score ${score} added for round ${round + 1}`);
-            } else if (round >= 5) {
-                showToast('Player finished, register new player');
+            } else if (round >= 3) {
+                showToast('Player completed, use Add Next Player or Reset');
+                checkForCelebration();
             }
         });
 
         function showToast(message) {
             const toast = document.getElementById('toast');
             toast.textContent = message;
-            toast.style.display = 'block';
-            setTimeout(() => toast.style.display = 'none', 2000);
+            toast.classList.remove('hidden');
+            setTimeout(() => toast.classList.add('hidden'), 2000);
         }
 
         socket.on('update_player', (data) => {
             currentPlayer = data;
             round = currentPlayer.scores.length;
             updateDisplay();
+            if (currentPlayer && currentPlayer.name) {
+                document.getElementById('playerScoringHeader').textContent = `${currentPlayer.name}'s Scoring`;
+            }
+            if (round === 3 && !currentPlayer.completed) {
+                document.getElementById('resetButton').classList.remove('hidden');
+                document.getElementById('addNextButton').classList.remove('hidden');
+                checkForCelebration();
+            }
         });
 
         socket.on('update_leaderboard', (data) => {
-            updateLeaderboard(data);
+            leaderboard = data || [];
+            updateLeaderboard(leaderboard);
         });
 
-        socket.on('new_high_score', () => {
-            showToast('Congratulations! New High Score!');
+        socket.on('new_high_score', (data) => {
+            if (data && data.name && data.score) {
+                showCelebration(data.name, data.score);
+            } else {
+                console.log('New high score data missing:', data);
+            }
         });
 
-        socket.on('reset_all', () => {
-            currentPlayer = null;
-            round = 0;
+        socket.on('player_completed', (data) => {
+            currentPlayer = data;
             updateDisplay();
-            document.getElementById('playerName').value = ''; // Clear input on reset
-            updateLeaderboard([]);
+            document.getElementById('totalScore').classList.add('font-bold');
+            document.getElementById('resetButton').classList.remove('hidden');
+            document.getElementById('addNextButton').classList.remove('hidden');
+            checkForCelebration();
         });
 
         function updateDisplay() {
             const boxes = document.getElementById('scoreBoxes');
             boxes.innerHTML = '';
-            for (let i = 0; i < 5; i++) {
+            for (let i = 0; i < 3; i++) {
                 const box = document.createElement('div');
-                box.className = 'score-box';
+                box.className = 'w-12 h-12 border-2 border-gray-700 flex items-center justify-center';
                 box.textContent = i < currentPlayer.scores.length ? currentPlayer.scores[i] : '';
                 boxes.appendChild(box);
             }
@@ -198,9 +191,50 @@
             leaderboard.innerHTML = '';
             players.forEach((p, index) => {
                 const div = document.createElement('div');
-                div.innerHTML = `${p.rank}. ${p.name} ${p.total}`;
+                div.className = 'flex justify-between';
+                div.innerHTML = `<span>${p.rank}. ${p.name}</span><span>${p.total}</span>`;
                 leaderboard.appendChild(div);
             });
+        }
+
+        function showCelebration(name, score) {
+            isCelebrating = true;
+            const modal = document.getElementById('celebrateModal');
+            const message = document.getElementById('celebrateMessage');
+            message.textContent = `${name}, you set a new high score of ${score}!`;
+            modal.classList.remove('hidden');
+            if (typeof confetti !== 'undefined') {
+                confetti({
+                    particleCount: 100,
+                    spread: 70,
+                    origin: { y: 0.6 }
+                });
+            } else {
+                console.log('Confetti not loaded');
+            }
+            setTimeout(() => {
+                modal.classList.add('hidden');
+                isCelebrating = false;
+                if (nextPlayerRequested) {
+                    nextPlayerRequested = false;
+                    document.getElementById('nameModal').classList.remove('hidden');
+                    document.getElementById('modalPlayerName').focus();
+                }
+            }, 3000);
+        }
+
+        function checkForCelebration() {
+            let maxScore = 0;
+            if (leaderboard.length > 0) {
+                maxScore = Math.max(...leaderboard.map(p => p.total));
+            }
+            if (currentPlayer && currentPlayer.total > maxScore) {
+                showCelebration(currentPlayer.name, currentPlayer.total);
+            } else if (nextPlayerRequested && !isCelebrating) {
+                nextPlayerRequested = false;
+                document.getElementById('nameModal').classList.remove('hidden');
+                document.getElementById('modalPlayerName').focus();
+            }
         }
     </script>
 </body>
