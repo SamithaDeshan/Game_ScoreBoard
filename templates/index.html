@@ -26,7 +26,7 @@
     </style>
 </head>
 <body class="bg-gray-900 text-white flex h-screen relative">
-    <img src="/static/hi.gif" alt="Hi Animation" class="absolute bottom-0 left-0 w-32 h-auto">
+    <img src="/static/hi.gif" alt="Hi Animation" class="absolute bottom-0 left-0 w-42 h-auto">
     <div class="flex w-full">
         <!-- Main Scoring Area -->
         <div class="flex-1 p-6 flex flex-col items-center justify-center">
@@ -34,9 +34,13 @@
             <div id="playerScoringHeader" class="text-2xl font-bold mb-4">Current Player Name's Scoring</div>
             <div id="scoreBoxes" class="flex gap-4 mb-4"></div>
             <div id="totalScore" class="text-xl mb-4">Total Marks: 0</div>
-            <button id="resetButton" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded mb-2 hidden">Reset</button>
-            <button id="addNextButton" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded hidden">Add Next Player</button>
+            <div class="flex flex-col gap-2 mb-4">  <!-- Changed to flex-col and added margin-bottom -->
+                <button id="addNextButton" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded hidden">Add Next Player</button>
+                <button id="resetButton" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded hidden">Reset</button>
+            </div>
             <div id="toast" class="fixed top-4 right-4 bg-green-600 text-white p-2 rounded hidden"></div>
+            <!-- Moved Back Button Here -->
+            <button id="backButton" class="absolute bottom-4 right-4 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded" onclick="window.location.href='/'">Back</button>
         </div>
 
         <!-- Leaderboard Sidebar -->
@@ -73,13 +77,13 @@
         let isCelebrating = false;
         let nextPlayerRequested = false;
         let leaderboard = [];
-        let celebratedTotals = {}; // Track celebrated totals per player
 
-        // Show modal on first visit
+        // Request leaderboard data on page load to maintain state
         document.addEventListener('DOMContentLoaded', () => {
             if (!currentPlayer) {
                 document.getElementById('nameModal').classList.remove('hidden');
             }
+            socket.emit('request_leaderboard'); // Request initial leaderboard
         });
 
         document.getElementById('submitName').addEventListener('click', () => {
@@ -88,7 +92,6 @@
                 socket.emit('register_player', name);
                 document.getElementById('nameModal').classList.add('hidden');
                 document.getElementById('modalPlayerName').value = '';
-                celebratedTotals[name] = {}; // Initialize celebrated totals for new player
             }
         });
 
@@ -102,7 +105,6 @@
                 document.getElementById('resetButton').classList.add('hidden');
                 document.getElementById('addNextButton').classList.add('hidden');
                 document.getElementById('playerScoringHeader').textContent = "Current Player Name's Scoring";
-                celebratedTotals[currentPlayer.name] = {}; // Reset celebrated totals for this player
             }
         });
 
@@ -179,6 +181,11 @@
             checkForCelebration();
         });
 
+        // Add a custom event to request leaderboard data
+        socket.on('connect', () => {
+            socket.emit('request_leaderboard');
+        });
+
         function updateDisplay() {
             const boxes = document.getElementById('scoreBoxes');
             boxes.innerHTML = '';
@@ -203,7 +210,7 @@
         }
 
         function showCelebration(name, score) {
-            if (currentPlayer && currentPlayer.name && !celebratedTotals[currentPlayer.name][score]) {
+            if (currentPlayer && currentPlayer.name && !currentPlayer.celebrated?.[score]) {
                 isCelebrating = true;
                 const modal = document.getElementById('celebrateModal');
                 const message = document.getElementById('celebrateMessage');
@@ -226,8 +233,8 @@
                         document.getElementById('nameModal').classList.remove('hidden');
                         document.getElementById('modalPlayerName').focus();
                     }
-                    // Mark this score as celebrated for the player
-                    celebratedTotals[currentPlayer.name][score] = true;
+                    if (!currentPlayer.celebrated) currentPlayer.celebrated = {};
+                    currentPlayer.celebrated[score] = true;
                 }, 3000);
             }
         }
@@ -237,7 +244,7 @@
             if (leaderboard.length > 0) {
                 maxScore = Math.max(...leaderboard.map(p => p.total));
             }
-            if (currentPlayer && currentPlayer.total >= maxScore && !celebratedTotals[currentPlayer.name]?.[currentPlayer.total]) {
+            if (currentPlayer && currentPlayer.total >= maxScore && !currentPlayer.celebrated?.[currentPlayer.total]) {
                 showCelebration(currentPlayer.name, currentPlayer.total);
             } else if (nextPlayerRequested && !isCelebrating) {
                 nextPlayerRequested = false;
