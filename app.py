@@ -3,7 +3,7 @@ from flask_socketio import SocketIO, emit
 import csv
 import os
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder='static')
 socketio = SocketIO(app, cors_allowed_origins="*")
 
 players = []  # In-memory list: [{'name': str, 'scores': list, 'total': int}]
